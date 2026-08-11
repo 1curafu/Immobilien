@@ -1,0 +1,57 @@
+import httpx
+
+from src import geocode as geo
+from src.models import Listing
+from src.scrapers.base import ScraperError, SearchConfig
+
+BASE_URL = "https://flatfox.ch/api/v1"
+USER_AGENT = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+)
+
+
+def _fetch_pins(client: httpx.Client, bbox: dict) -> list[dict]:
+    params = {**bbox, "offer_type": "RENT", "max_count": 500}
+    response = client.get(f"{BASE_URL}/pin/", params=params)
+    response.raise_for_status()
+    return response.json()
+
+
+def _fetch_listing_details(client: httpx.Client, pks: list[int]) -> list[dict]:
+    if not pks:
+        return []
+    params = [("pk", pk) for pk in pks] + [("limit", len(pks))]
+    response = client.get(f"{BASE_URL}/public-listing/", params=params)
+    response.raise_for_status()
+    return response.json()["results"]
+
+
+def _to_listing(raw: dict) -> Listing:
+    rooms = raw.get("number_of_rooms")
+    return Listing(
+        id=f"flatfox:{raw['pk']}",
+        titel=raw.get("short_title") or raw.get("public_title", ""),
+        preis=float(raw["price_display"]),
+        ort=raw.get("city", ""),
+        zimmer=float(rooms) if rooms not in (None, "") else None,
+        url=f"https://flatfox.ch{raw['url']}",
+        quelle="flatfox",
+    )
+
+
+def scrape(config: SearchConfig, geocode_conn) -> list[Listing]:
+    center = geo.geocode(geocode_conn, config.stadt)
+    if center is None:
+        raise ScraperError(f"flatfox: Zielstadt '{config.stadt}' konnte nicht geokodiert werden")
+    bbox = geo.bbox_around(center[0], center[1], config.radius_km)
+
+    try:
+        with httpx.Client(headers={"User-Agent": USER_AGENT, "Accept": "application/json"}, timeout=15) as client:
+            pins = _fetch_pins(client, bbox)
+            pks = [pin["pk"] for pin in pins]
+            raw_listings = _fetch_listing_details(client, pks)
+    except httpx.HTTPError as exc:
+        raise ScraperError(f"flatfox: Anfrage fehlgeschlagen — {exc}") from exc
+
+    return [_to_listing(raw) for raw in raw_listings]

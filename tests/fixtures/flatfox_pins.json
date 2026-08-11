@@ -1,0 +1,4 @@
+[
+  {"pk": 86263289, "smg_id": "4003375644", "latitude": 47.4850196, "longitude": 8.9902972, "price_display": 3600, "price_display_type": "TOTAL", "price_unit": "monthly", "offer_type": "RENT"},
+  {"pk": 86263510, "smg_id": "4003375837", "latitude": 47.5701, "longitude": 9.1123, "price_display": 620, "price_display_type": "TOTAL", "price_unit": "monthly", "offer_type": "RENT"}
+]

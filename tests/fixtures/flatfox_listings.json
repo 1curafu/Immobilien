@@ -1,0 +1,25 @@
+{
+  "count": 2,
+  "next": null,
+  "previous": null,
+  "results": [
+    {
+      "pk": 86263289,
+      "url": "/en/flat/mezikonerstrassw-7a-9542-munchwilen-tg/86263289/",
+      "price_display": 2430,
+      "number_of_rooms": "4.0",
+      "city": "Münchwilen TG",
+      "short_title": "4 rooms apartment",
+      "public_title": "Mezikonerstrassw 7a, 9542 Münchwilen TG - CHF 2'430"
+    },
+    {
+      "pk": 86263510,
+      "url": "/en/flat/beispielstrasse-1-8570-weinfelden/86263510/",
+      "price_display": 620,
+      "number_of_rooms": "1.0",
+      "city": "Weinfelden",
+      "short_title": "1 room apartment",
+      "public_title": "Beispielstrasse 1, 8570 Weinfelden - CHF 620"
+    }
+  ]
+}
