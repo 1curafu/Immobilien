@@ -91,3 +91,30 @@ def test_scrape_raises_scraper_error_on_http_failure(mocker):
 
     with pytest.raises(ScraperError):
         flatfox.scrape(_config(), _conn_with_weinfelden_cached())
+
+
+def test_scrape_raises_scraper_error_on_malformed_listing(mocker):
+    pins = [{"pk": 1}]
+    malformed_response = {
+        "results": [
+            {"pk": 1, "url": "/x/1/", "number_of_rooms": "1.0",
+             "city": "Weinfelden", "short_title": "Flat"}
+            # Missing price_display — will cause KeyError in _to_listing
+        ]
+    }
+
+    mock_pins_response = mocker.Mock()
+    mock_pins_response.json.return_value = pins
+    mock_pins_response.raise_for_status.return_value = None
+
+    mock_listings_response = mocker.Mock()
+    mock_listings_response.json.return_value = malformed_response
+    mock_listings_response.raise_for_status.return_value = None
+
+    mock_client = mocker.MagicMock()
+    mock_client.__enter__.return_value = mock_client
+    mock_client.get.side_effect = [mock_pins_response, mock_listings_response]
+    mocker.patch("src.scrapers.flatfox.httpx.Client", return_value=mock_client)
+
+    with pytest.raises(ScraperError):
+        flatfox.scrape(_config(), _conn_with_weinfelden_cached())

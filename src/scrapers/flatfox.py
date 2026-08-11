@@ -51,7 +51,6 @@ def scrape(config: SearchConfig, geocode_conn) -> list[Listing]:
             pins = _fetch_pins(client, bbox)
             pks = [pin["pk"] for pin in pins]
             raw_listings = _fetch_listing_details(client, pks)
-    except httpx.HTTPError as exc:
-        raise ScraperError(f"flatfox: Anfrage fehlgeschlagen — {exc}") from exc
-
-    return [_to_listing(raw) for raw in raw_listings]
+        return [_to_listing(raw) for raw in raw_listings]
+    except (httpx.HTTPError, KeyError, ValueError, TypeError) as exc:
+        raise ScraperError(f"flatfox: Anfrage oder Verarbeitung fehlgeschlagen — {exc}") from exc
