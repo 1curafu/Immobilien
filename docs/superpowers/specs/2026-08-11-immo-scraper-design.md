@@ -12,12 +12,22 @@ Automatisierte, tägliche Suche nach Mietwohnungen/-zimmern in der Schweiz über
 - **Mindest-Zimmerzahl:** keine (egal)
 - **Ziel-Email:** icurafu333@gmail.com
 
-Bei CHF 650 handelt es sich realistisch eher um ein WG-Zimmer als eine ganze Wohnung — Homegate, ImmoScout24, Comparis und Flatfox listen überwiegend ganze Wohnungen. Deshalb wird zusätzlich **wgzimmer.ch** (WG-Zimmer-Spezialist) als Quelle eingebunden.
+Bei CHF 650 handelt es sich realistisch eher um ein WG-Zimmer als eine ganze Wohnung — Homegate, ImmoScout24, Comparis und Flatfox listen überwiegend ganze Wohnungen. wgzimmer.ch wäre als WG-Zimmer-Spezialist naheliegend, scheidet aber aus (siehe unten).
+
+### Recherche-Update: wgzimmer.ch ausgeschlossen
+
+Live-Recherche der 5 ursprünglich vorgesehenen Portale ergab technische Fakten, die die Portalauswahl und Bauweise ändern:
+
+- **wgzimmer.ch**: jede Suchanfrage — auch aus echtem Browser — wird durch **Google reCAPTCHA** blockiert (`"Das Verarbeiten der Anfrage wurde von Google reCaptcha gestoppt"`). Automatisiertes Scraping würde eine aktive Sicherheitsmaßnahme umgehen. **Wird nicht gebaut.** Stattdessen wird wgzimmer.ch in der README als manuell zu prüfende Quelle mit direktem Suchlink erwähnt.
+- **flatfox.ch**: hat eine offene, öffentliche JSON-REST-API ohne Anti-Bot-Schutz (`GET /api/v1/pin/?east=&north=&south=&west=&offer_type=RENT` für Bounding-Box-Suche, dann `GET /api/v1/public-listing/?pk=<id>&...` für Details). Kein HTML-Scraping nötig — einfachster Fall, wird Phase 1.
+- **comparis.ch, homegate.ch, immoscout24.ch**: alle drei hinter **DataDome** (blockt jeden reinen `curl`/`httpx`-Request mit 403; ein echter, nicht offensichtlich als Headless erkennbarer Playwright-Chromium kommt durch — normales Browsing, keine Umgehung eines Zugriffsschutzes gegen echte Nutzer). homegate.ch und immoscout24.ch laufen auf identischer Plattform (Swiss Marketplace Group) mit identischen `data-test`-Attributen — gleicher Scraper-Code, andere Domain.
+
+Portalliste damit: **Flatfox (JSON API), Homegate, ImmoScout24, Comparis** — alle vier automatisierbar ohne Umgehung von Sicherheitsmaßnahmen.
 
 ## Tech-Stack
 
 - Python 3.11+
-- **Scraping:** `httpx` + `BeautifulSoup4` für statische Seiten (wgzimmer.ch, Flatfox); `playwright` (headless Chromium) für JS-lastige Portale (Homegate, ImmoScout24, Comparis)
+- **Scraping:** `httpx` (reines JSON, keine HTML-Parsing nötig) für Flatfox' öffentliche API; `playwright` mit echtem, nicht als Headless erkennbarem Chromium (`headless=False` via Xvfb im CI, oder `channel="chrome"`) für die DataDome-geschützten Portale Homegate, ImmoScout24, Comparis
 - **Geocoding:** `geopy` mit Nominatim (OpenStreetMap)
 - **Persistenz:** SQLite (`seen_listings.db`) für Dedupe und Geocode-Cache
 - **Scheduling:** GitHub Actions Cron (täglich 07:00 Uhr Europe/Zurich)
@@ -36,17 +46,17 @@ immo-scraper/
 │   ├── main.py                  # Orchestriert: scrape → normalisieren → geocode/radius-filter → dedupe → sortieren → mailen
 │   ├── scrapers/
 │   │   ├── base.py              # Scraper-Interface: scrape() -> list[Listing]
-│   │   ├── wgzimmer.py          # httpx + BeautifulSoup4 (statisch)
-│   │   ├── flatfox.py           # httpx + BeautifulSoup4 (statisch)
-│   │   ├── comparis.py          # Playwright (JS-lastig)
-│   │   ├── homegate.py          # Playwright (JS-lastig)
-│   │   └── immoscout24.py       # Playwright (JS-lastig)
+│   │   ├── homegate_platform.py # gemeinsame Playwright-Parsing-Logik für Homegate + ImmoScout24 (identische Plattform/DOM)
+│   │   ├── flatfox.py           # httpx, öffentliche JSON-API (kein HTML-Parsing)
+│   │   ├── comparis.py          # Playwright (DataDome-geschützt)
+│   │   ├── homegate.py          # dünner Wrapper um homegate_platform.py, domain=homegate.ch
+│   │   └── immoscout24.py       # dünner Wrapper um homegate_platform.py, domain=immoscout24.ch
 │   ├── models.py                # Listing-Dataclass: titel, preis, ort, zimmer, url, quelle, id
 │   ├── geocode.py                # Nominatim-Anbindung + geocode_cache (SQLite), Haversine-Distanz
 │   ├── dedupe.py                 # SQLite: welche Listing-IDs wurden schon gemeldet
 │   └── notifier.py               # baut HTML-Email (Tabelle nach Preis sortiert), sendet via SMTP
 ├── tests/
-│   ├── fixtures/*.html           # gespeicherte Beispielseiten pro Portal
+│   ├── fixtures/                 # gespeicherte JSON-/HTML-Beispiele pro Portal
 │   └── test_scrapers.py          # parst Fixtures offline, keine Live-Requests
 └── .github/workflows/search.yml
 ```
@@ -56,7 +66,7 @@ immo-scraper/
 1. `main.py` lädt `config.yaml` und `.env`
 2. Für jeden aktivierten Scraper: `scrape()` in try/except aufrufen, mit Rate-Limit-Pause zwischen Requests und realistischem User-Agent pro Scraper. Ein fehlschlagender Scraper wird protokolliert (Portalname + Fehlermeldung), stoppt aber nicht die anderen.
 3. Alle zurückgegebenen `Listing`-Objekte werden zu einer Liste zusammengeführt (einheitliches Format über alle Quellen)
-4. **Umkreisfilter:** Zielstadt wird einmal pro Lauf via Nominatim geocodiert (lokal gecacht). Für jedes Listing wird der vom Portal gelieferte Ortsname ebenfalls geocodiert — Ergebnis dauerhaft in SQLite-Tabelle `geocode_cache` gespeichert, damit Nominatims 1-Request/Sekunde-Limit nur bei neuen, noch nicht gecachten Orten greift. Haversine-Distanz zur Zielstadt berechnen, alles außerhalb des Radius verwerfen. Portale mit nativer Umkreissuche (z. B. Homegate) nutzen deren Parameter zusätzlich als Vorfilter; Haversine bleibt die Ground-Truth-Filterung über alle Quellen hinweg.
+4. **Umkreisfilter:** Zielstadt wird einmal pro Lauf via Nominatim geocodiert (lokal gecacht). Für jedes Listing wird der vom Portal gelieferte Ortsname ebenfalls geocodiert — Ergebnis dauerhaft in SQLite-Tabelle `geocode_cache` gespeichert, damit Nominatims 1-Request/Sekunde-Limit nur bei neuen, noch nicht gecachten Orten greift. Haversine-Distanz zur Zielstadt berechnen, alles außerhalb des Radius verwerfen. Flatfox unterstützt nativ eine Bounding-Box-Vorfilterung (`/api/v1/pin/?east=&north=&south=&west=`, aus Zielstadt-Koordinaten ± Radius berechnet) — Haversine bleibt trotzdem die Ground-Truth-Filterung über alle Quellen hinweg, da eine Bounding-Box kein exakter Kreis ist.
 5. **Preis-/Zimmerfilter:** Listings über dem Preislimit bzw. unter der Mindest-Zimmerzahl werden verworfen
 6. **Dedupe:** gegen `seen_listings.db` prüfen, welche IDs bereits gemeldet wurden; nur neue Listings weiterreichen; neue IDs anschließend als gesehen markieren
 7. **Sortierung:** neue Listings nach Preis aufsteigend sortieren
@@ -74,15 +84,16 @@ email:
   empfaenger: "icurafu333@gmail.com"
   nur_bei_treffern: true   # false = auch Emails ohne neue Treffer verschicken
 scraper:
-  aktiviert: [wgzimmer, flatfox, comparis, homegate, immoscout24]
+  aktiviert: [flatfox, comparis, homegate, immoscout24]
   rate_limit_sekunden: 2
 ```
 
-### Robots.txt / RSS
+### Robots.txt-Compliance je Portal (recherchiert, verbindlich für Implementierung)
 
-Vor Implementierung jedes Scrapers wird kurz dokumentiert (Kommentar im jeweiligen Scraper-Modul + README-Abschnitt):
-- ob und was `robots.txt` für den Scraping-Pfad erlaubt
-- ob das Portal einen offiziellen RSS-/Alert-Feed anbietet — falls ja, wird dieser dem HTML-Scraping vorgezogen (stabiler, weniger Breakage-Risiko)
+- **Flatfox:** `robots.txt` erlaubt `/` (bis auf `/admin/`, `/*/partner/`, `/*/cockpit/` — nicht betroffen). API-Nutzung unkritisch.
+- **Homegate & ImmoScout24:** `robots.txt` disallowed generisch `/*?*an=`, erlaubt aber explizit `/mieten/immobilien/*/trefferliste?an=G` (Homegate) bzw. `/de/immobilien/mieten/*?an=G` (ImmoScout24). Der Scraper **muss** den Query-Parameter `an=G` an jede Trefferlisten-URL anhängen, sonst außerhalb des erlaubten Pfads.
+- **Comparis:** `robots.txt` disallowed `/immobilien/api/`, `/immobilien/searchservice/`, `/immobilien/details/`, `/immobilien/dataProvider/` — nicht aber `/immobilien/result/list`. Der Scraper **muss** die HTML-Route `/immobilien/result/list` verwenden, nicht den (schnelleren, aber gesperrten) JSON-Zwilling `/immobilien/api/v1/singlepage/secondLevelPage`.
+- **wgzimmer.ch:** kein RSS/API gefunden, jede Suche reCAPTCHA-gesperrt — daher nicht automatisiert (siehe oben), in README als manuelle Quelle verlinkt.
 
 ### Fehlerbehandlung
 
@@ -92,16 +103,17 @@ Vor Implementierung jedes Scrapers wird kurz dokumentiert (Kommentar im jeweilig
 
 ### Testing
 
-- Pro Portal ein gespeichertes HTML-Fixture unter `tests/fixtures/`
-- `test_scrapers.py` parst Fixtures offline — keine Live-Requests während Tests
+- **Flatfox:** gespeicherte Beispiel-JSON-Responses unter `tests/fixtures/flatfox_pins.json` und `tests/fixtures/flatfox_listings.json`, `httpx`-Client in Tests gemockt (kein Live-Call)
+- **Homegate/ImmoScout24/Comparis:** gespeicherte HTML-Fixtures unter `tests/fixtures/*.html` (mit Playwright einmalig live erzeugt, dann eingecheckt), Parsing-Logik wird gegen das eingecheckte HTML getestet statt gegen eine Live-Seite
+- `test_scrapers.py` läuft komplett offline — keine Live-Requests, kein Playwright-Browserstart während Tests
 - Geocoding/Haversine-Logik wird mit festen Koordinaten-Paaren getestet (kein Live-Nominatim-Call in Tests)
 
 ## Bauphasen (für Implementierungsplan)
 
-1. **Phase 1 — Vertikale Slice:** Pipeline-Skelett (`main.py`, `models.py`, `dedupe.py`, `geocode.py`, `notifier.py`) + `wgzimmer.py`-Scraper (statisch, httpx+BS4) end-to-end lauffähig, lokal getestet mit `.env`
-2. **Phase 2:** `flatfox.py` (statisch) hinzufügen
-3. **Phase 3:** `comparis.py`, `homegate.py`, `immoscout24.py` (Playwright, JS-lastig) einzeln hinzufügen, jeweils isoliert gegen Fixtures getestet
-4. **Phase 4:** GitHub Actions Workflow (`search.yml`, täglich 07:00 Uhr Europe/Zurich), README (lokales Setup, `playwright install`, Gmail-App-Passwort erstellen, Cron anpassen), Secrets-Dokumentation
+1. **Phase 1 — Vertikale Slice:** Pipeline-Skelett (`main.py`, `models.py`, `dedupe.py`, `geocode.py`, `notifier.py`) + `flatfox.py`-Scraper (httpx, JSON-API, kein Browser nötig) end-to-end lauffähig, lokal getestet mit `.env`
+2. **Phase 2:** `homegate_platform.py` (gemeinsame Playwright-Parsing-Logik, `data-test="result-list-item"`-Selektoren) + `homegate.py`-Wrapper hinzufügen
+3. **Phase 3:** `immoscout24.py` (dünner Wrapper um `homegate_platform.py`, andere Domain) + `comparis.py` (Playwright, eigene Parsing-Logik da andere Plattform) hinzufügen
+4. **Phase 4:** GitHub Actions Workflow (`search.yml`, täglich 07:00 Uhr Europe/Zurich), README (lokales Setup, `playwright install`, Gmail-App-Passwort erstellen, Cron anpassen, Hinweis auf wgzimmer.ch als manuell zu prüfende Quelle), Secrets-Dokumentation
 
 ## Out of Scope (v1)
 
