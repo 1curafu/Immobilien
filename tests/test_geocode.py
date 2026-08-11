@@ -1,5 +1,7 @@
 import sqlite3
 
+import httpx
+
 from src.geocode import bbox_around, filter_by_radius, geocode, haversine_km, init_geocode_cache
 from src.models import Listing
 
@@ -46,6 +48,15 @@ def test_geocode_returns_none_when_nominatim_finds_nothing(mocker):
     mocker.patch("src.geocode.time.sleep")
 
     assert geocode(conn, "Nirgendwo") is None
+
+
+def test_geocode_returns_none_on_http_error(mocker):
+    conn = _conn()
+    mocker.patch("src.geocode.httpx.get", side_effect=httpx.HTTPError("boom"))
+
+    result = geocode(conn, "Weinfelden")
+
+    assert result is None
 
 
 def test_haversine_zurich_to_bern_is_about_95km():

@@ -30,13 +30,17 @@ def geocode(conn: sqlite3.Connection, query: str) -> Optional[tuple[float, float
     if row is not None:
         return row[0], row[1]
 
-    response = httpx.get(
-        NOMINATIM_URL,
-        params={"q": f"{query}, Switzerland", "format": "json", "limit": 1},
-        headers={"User-Agent": USER_AGENT},
-        timeout=15,
-    )
-    response.raise_for_status()
+    try:
+        response = httpx.get(
+            NOMINATIM_URL,
+            params={"q": f"{query}, Switzerland", "format": "json", "limit": 1},
+            headers={"User-Agent": USER_AGENT},
+            timeout=15,
+        )
+        response.raise_for_status()
+    except httpx.HTTPError:
+        return None
+
     results = response.json()
     time.sleep(NOMINATIM_RATE_LIMIT_SECONDS)
     if not results:
