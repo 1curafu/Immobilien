@@ -1,0 +1,11 @@
+suche:
+  stadt: "Weinfelden"
+  radius_km: 15
+  preis_max: 650
+  zimmer_min: null   # null = keine Mindestanforderung
+email:
+  empfaenger: "icurafu333@gmail.com"
+  nur_bei_treffern: true   # false = auch Emails ohne neue Treffer verschicken
+scraper:
+  aktiviert: [flatfox]
+  rate_limit_sekunden: 2
