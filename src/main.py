@@ -6,12 +6,13 @@ from dotenv import load_dotenv
 
 from src import dedupe, geocode as geo
 from src.notifier import EmailConfig, build_html, build_subject, send_email
-from src.scrapers import flatfox, homegate
+from src.scrapers import flatfox, homegate, immoscout24
 from src.scrapers.base import ScraperError, SearchConfig
 
 SCRAPERS = {
     "flatfox": flatfox.scrape,
     "homegate": homegate.scrape,
+    "immoscout24": immoscout24.scrape,
 }
 
 ROOT = Path(__file__).resolve().parent.parent

@@ -7,5 +7,5 @@ email:
   empfaenger: "icurafu333@gmail.com"
   nur_bei_treffern: true   # false = auch Emails ohne neue Treffer verschicken
 scraper:
-  aktiviert: [flatfox, homegate]
+  aktiviert: [flatfox, homegate, immoscout24]
   rate_limit_sekunden: 2
