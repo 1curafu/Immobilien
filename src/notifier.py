@@ -28,7 +28,7 @@ def build_html(listings: list[Listing], errors: list[str]) -> str:
             # Validate URL scheme (only http/https allowed)
             parsed_url = urlparse(listing.url)
             if parsed_url.scheme in ("http", "https"):
-                link_html = f"<a href=\"{escape(listing.url, quote=True)}\">Inserat</a>"
+                link_html = f"<a href=\"{escape(listing.url, quote=True)}\">{escape(listing.titel)}</a>"
             else:
                 # Non-http(s) URL: render as escaped text without href
                 link_html = escape(listing.url)
