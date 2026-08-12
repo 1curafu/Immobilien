@@ -62,10 +62,22 @@ def _parse_rooms(text: str) -> Optional[float]:
     return float(match.group(1).replace(",", "."))
 
 
+def _resolve_comparis_url(href: str) -> Optional[str]:
+    absolute = href if href.startswith("http") else f"{BASE_URL}{href}"
+    parsed = urllib.parse.urlparse(absolute)
+    if parsed.hostname not in ("www.comparis.ch", "comparis.ch"):
+        return None
+    return absolute
+
+
 def _parse_link(link) -> Optional[Listing]:
     href = link.get_attribute("href") or ""
     id_match = ID_RE.search(href)
     if id_match is None:
+        return None
+
+    url = _resolve_comparis_url(href)
+    if url is None:
         return None
 
     container = link.evaluate_handle(
@@ -79,7 +91,7 @@ def _parse_link(link) -> Optional[Listing]:
         preis=_parse_price(text) or 0.0,
         ort=text,
         zimmer=_parse_rooms(text),
-        url=href if href.startswith("http") else f"{BASE_URL}{href}",
+        url=url,
         quelle="comparis",
     )
 

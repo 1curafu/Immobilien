@@ -62,3 +62,10 @@ def test_parse_link_returns_none_for_non_listing_link():
     link.get_attribute.return_value = "/immobilien/some-other-page"
 
     assert _parse_link(link) is None
+
+
+def test_parse_link_returns_none_for_untrusted_host_with_matching_path():
+    link = MagicMock()
+    link.get_attribute.return_value = "https://evil.example/immobilien/marktplatz/details/show/999"
+
+    assert _parse_link(link) is None
