@@ -56,7 +56,7 @@ def test_run_sends_email_with_only_new_nearby_affordable_listings(tmp_path, mock
     from src import main
     main.run(config_path=config_path, db_path=db_path)
 
-    assert "Near" in sent["html"]
+    assert "Weinfelden" in sent["html"]
     assert "Zürich" not in sent["html"]
     assert "fake_broken: Layout geändert?" in sent["html"]
 
