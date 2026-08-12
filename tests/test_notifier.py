@@ -4,9 +4,9 @@ from src.models import Listing
 from src.notifier import EmailConfig, build_html, build_subject, send_email
 
 
-def _listing(preis=650.0, ort="Weinfelden", quelle="flatfox"):
+def _listing(preis=650.0, ort="Weinfelden", quelle="flatfox", url="https://example.com/1"):
     return Listing(id="flatfox:1", titel="Test", preis=preis, ort=ort, zimmer=2.5,
-                   url="https://example.com/1", quelle=quelle)
+                   url=url, quelle=quelle)
 
 
 def test_build_subject_with_no_hits():
@@ -45,3 +45,36 @@ def test_send_email_logs_in_and_sends(mocker):
 
     mock_smtp.login.assert_called_once_with("a@gmail.com", "secret")
     assert mock_smtp.sendmail.called
+
+
+def test_build_html_escapes_malicious_ort():
+    """Regression test: HTML injection via listing.ort is escaped"""
+    malicious_listing = _listing(ort="<b>Malicious</b>")
+    html = build_html([malicious_listing], [])
+    assert "&lt;b&gt;" in html
+    assert "<b>Malicious</b>" not in html
+
+
+def test_build_html_escapes_malicious_quelle():
+    """Regression test: HTML injection via listing.quelle is escaped"""
+    malicious_listing = _listing(quelle="<script>alert('xss')</script>")
+    html = build_html([malicious_listing], [])
+    assert "&lt;script&gt;" in html
+    assert "<script>" not in html
+
+
+def test_build_html_escapes_error_messages():
+    """Regression test: HTML injection via error messages is escaped"""
+    html = build_html([], ["<img src=x onerror='alert(1)'>"])
+    assert "&lt;img" in html
+    assert "<img src" not in html
+
+
+def test_build_html_rejects_javascript_url():
+    """Regression test: javascript: URLs are not rendered as clickable links"""
+    malicious_listing = _listing(url="javascript:alert('xss')")
+    html = build_html([malicious_listing], [])
+    # javascript: URL should not appear in any href attribute
+    assert 'href="javascript:' not in html
+    # The URL should be displayed as escaped text, not as a clickable link
+    assert "&#x27;" in html  # Single quote is escaped as HTML entity

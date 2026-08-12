@@ -2,6 +2,8 @@ import smtplib
 from dataclasses import dataclass
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from html import escape
+from urllib.parse import urlparse
 
 from src.models import Listing
 
@@ -21,23 +23,34 @@ def build_subject(new_count: int) -> str:
 
 def build_html(listings: list[Listing], errors: list[str]) -> str:
     if listings:
-        rows = "\n".join(
-            f"<tr><td>CHF {listing.preis:.0f}</td><td>{listing.ort}</td>"
-            f"<td>{listing.zimmer if listing.zimmer is not None else '-'}</td>"
-            f"<td><a href=\"{listing.url}\">Inserat</a></td><td>{listing.quelle}</td></tr>"
-            for listing in listings
-        )
+        rows = []
+        for listing in listings:
+            # Validate URL scheme (only http/https allowed)
+            parsed_url = urlparse(listing.url)
+            if parsed_url.scheme in ("http", "https"):
+                link_html = f"<a href=\"{escape(listing.url, quote=True)}\">Inserat</a>"
+            else:
+                # Non-http(s) URL: render as escaped text without href
+                link_html = escape(listing.url)
+
+            row = (
+                f"<tr><td>CHF {listing.preis:.0f}</td><td>{escape(listing.ort)}</td>"
+                f"<td>{listing.zimmer if listing.zimmer is not None else '-'}</td>"
+                f"<td>{link_html}</td><td>{escape(listing.quelle)}</td></tr>"
+            )
+            rows.append(row)
+
         table = (
             "<table border=\"1\" cellpadding=\"6\" cellspacing=\"0\">"
             "<tr><th>Preis</th><th>Ort</th><th>Zimmer</th><th>Link</th><th>Quelle</th></tr>"
-            f"{rows}</table>"
+            f"{''.join(rows)}</table>"
         )
     else:
         table = "<p>Keine neuen Treffer.</p>"
 
     error_section = ""
     if errors:
-        items = "".join(f"<li>{error}</li>" for error in errors)
+        items = "".join(f"<li>{escape(error)}</li>" for error in errors)
         error_section = f"<h3>⚠️ Fehler bei folgenden Scrapern</h3><ul>{items}</ul>"
 
     return f"<h2>{len(listings)} neue Treffer</h2>{table}{error_section}"
