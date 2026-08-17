@@ -52,7 +52,9 @@ secret** folgende drei Secrets anlegen:
 
 - `GMAIL_ADDRESS`
 - `GMAIL_APP_PASSWORD`
-- `RECIPIENT_EMAIL`
+- `RECIPIENT_EMAIL` — eine Adresse, oder mehrere kommagetrennt (z. B.
+  `a@gmail.com, b@gmail.com`), um an mehrere Empfänger gleichzeitig zu senden.
+  Überschreibt, wenn gesetzt, `email.empfaenger` aus `config.yaml`.
 
 Der Workflow `.github/workflows/search.yml` läuft täglich um 07:00 Uhr
 Europe/Zurich (Sommerzeit; im Winter ca. 06:00 Uhr lokal, da GitHub-Cron keine

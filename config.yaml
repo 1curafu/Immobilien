@@ -4,7 +4,7 @@ suche:
   preis_max: 1000
   zimmer_min: null   # null = keine Mindestanforderung
 email:
-  empfaenger: "icurafu333@gmail.com"
+  empfaenger: "icurafu333@gmail.com"   # Fallback, wenn RECIPIENT_EMAIL in .env nicht gesetzt ist
   nur_bei_treffern: true   # false = auch Emails ohne neue Treffer verschicken
 scraper:
   aktiviert: [flatfox, homegate, immoscout24, comparis]

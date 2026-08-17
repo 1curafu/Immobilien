@@ -71,11 +71,16 @@ def run(config_path: Path = DEFAULT_CONFIG_PATH, db_path: Path = DEFAULT_DB_PATH
 
     should_send = new_listings or errors or not raw_config["email"]["nur_bei_treffern"]
     if should_send:
-        recipient = os.environ.get("RECIPIENT_EMAIL") or raw_config["email"]["empfaenger"]
+        recipient_env = os.environ.get("RECIPIENT_EMAIL")
+        if recipient_env:
+            recipients = [addr.strip() for addr in recipient_env.split(",") if addr.strip()]
+        else:
+            empfaenger = raw_config["email"]["empfaenger"]
+            recipients = [empfaenger] if isinstance(empfaenger, str) else list(empfaenger)
         email_config = EmailConfig(
             gmail_address=os.environ["GMAIL_ADDRESS"],
             gmail_app_password=os.environ["GMAIL_APP_PASSWORD"],
-            recipient=recipient,
+            recipients=recipients,
         )
         send_email(email_config, build_subject(len(new_listings)), build_html(new_listings, errors))
 

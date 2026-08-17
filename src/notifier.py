@@ -12,7 +12,7 @@ from src.models import Listing
 class EmailConfig:
     gmail_address: str
     gmail_app_password: str
-    recipient: str
+    recipients: list[str]
 
 
 def build_subject(new_count: int) -> str:
@@ -60,9 +60,9 @@ def send_email(config: EmailConfig, subject: str, html_body: str) -> None:
     message = MIMEMultipart("alternative")
     message["Subject"] = subject
     message["From"] = config.gmail_address
-    message["To"] = config.recipient
+    message["To"] = ", ".join(config.recipients)
     message.attach(MIMEText(html_body, "html"))
 
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
         server.login(config.gmail_address, config.gmail_app_password)
-        server.sendmail(config.gmail_address, [config.recipient], message.as_string())
+        server.sendmail(config.gmail_address, config.recipients, message.as_string())

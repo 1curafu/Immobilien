@@ -40,11 +40,29 @@ def test_send_email_logs_in_and_sends(mocker):
     mock_smtp.__enter__.return_value = mock_smtp
     mocker.patch("src.notifier.smtplib.SMTP_SSL", return_value=mock_smtp)
 
-    config = EmailConfig(gmail_address="a@gmail.com", gmail_app_password="secret", recipient="b@gmail.com")
+    config = EmailConfig(gmail_address="a@gmail.com", gmail_app_password="secret", recipients=["b@gmail.com"])
     send_email(config, "Subject", "<p>Body</p>")
 
     mock_smtp.login.assert_called_once_with("a@gmail.com", "secret")
     assert mock_smtp.sendmail.called
+
+
+def test_send_email_sends_to_multiple_recipients(mocker):
+    mock_smtp = MagicMock()
+    mock_smtp.__enter__.return_value = mock_smtp
+    mocker.patch("src.notifier.smtplib.SMTP_SSL", return_value=mock_smtp)
+
+    config = EmailConfig(
+        gmail_address="a@gmail.com",
+        gmail_app_password="secret",
+        recipients=["b@gmail.com", "c@gmail.com"],
+    )
+    send_email(config, "Subject", "<p>Body</p>")
+
+    to_addrs = mock_smtp.sendmail.call_args.args[1]
+    assert to_addrs == ["b@gmail.com", "c@gmail.com"]
+    message_string = mock_smtp.sendmail.call_args.args[2]
+    assert "b@gmail.com, c@gmail.com" in message_string
 
 
 def test_build_html_escapes_malicious_ort():
