@@ -85,11 +85,15 @@ def _parse_link(link) -> Optional[Listing]:
     ).as_element()
     text = container.inner_text() if container else (link.inner_text() or "")
 
+    preis = _parse_price(text)
+    if preis is None:
+        return None
+
     return Listing(
         id=f"comparis:{id_match.group(1)}",
         titel=text.splitlines()[0].strip() if text else "Wohnung",
-        preis=_parse_price(text) or 0.0,
-        ort=text,
+        preis=preis,
+        ort=text.splitlines()[0].strip() if text else "",
         zimmer=_parse_rooms(text),
         url=url,
         quelle="comparis",

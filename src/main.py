@@ -52,6 +52,8 @@ def run(config_path: Path = DEFAULT_CONFIG_PATH, db_path: Path = DEFAULT_DB_PATH
             all_listings.extend(scrape_fn(search_config, conn))
         except ScraperError as exc:
             errors.append(str(exc))
+        except Exception as exc:  # noqa: BLE001 - a single scraper failing must never stop the run
+            errors.append(f"{name}: unerwarteter Fehler — {exc}")
 
     nearby = geo.filter_by_radius(conn, all_listings, center, search_config.radius_km)
     filtered = [
@@ -69,10 +71,11 @@ def run(config_path: Path = DEFAULT_CONFIG_PATH, db_path: Path = DEFAULT_DB_PATH
 
     should_send = new_listings or errors or not raw_config["email"]["nur_bei_treffern"]
     if should_send:
+        recipient = os.environ.get("RECIPIENT_EMAIL") or raw_config["email"]["empfaenger"]
         email_config = EmailConfig(
             gmail_address=os.environ["GMAIL_ADDRESS"],
             gmail_app_password=os.environ["GMAIL_APP_PASSWORD"],
-            recipient=raw_config["email"]["empfaenger"],
+            recipient=recipient,
         )
         send_email(email_config, build_subject(len(new_listings)), build_html(new_listings, errors))
 

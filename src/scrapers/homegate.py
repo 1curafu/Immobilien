@@ -6,4 +6,11 @@ BASE_URL = "https://www.homegate.ch"
 
 
 def scrape(config: SearchConfig, geocode_conn) -> list[Listing]:
-    return scrape_platform(BASE_URL, "homegate", config.stadt, config.rate_limit_sekunden)
+    return scrape_platform(
+        BASE_URL,
+        "homegate",
+        config.stadt,
+        config.rate_limit_sekunden,
+        allowed_hosts=("www.homegate.ch", "homegate.ch"),
+        path_template="/mieten/immobilien/ort-{city_slug}/trefferliste?an=G",
+    )

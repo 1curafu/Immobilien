@@ -1,6 +1,7 @@
 import re
 import time
 from typing import Optional
+from urllib.parse import urlparse
 
 from playwright.sync_api import Error as PlaywrightError, sync_playwright
 
@@ -12,13 +13,18 @@ USER_AGENT = (
     "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
 )
 
+PRICE_RE = re.compile(r"CHF\s*([\d'’.]+)")
+
 
 def _slugify_city(city: str) -> str:
     return city.strip().lower().replace(" ", "-")
 
 
 def _parse_price(text: str) -> Optional[float]:
-    digits = re.sub(r"[^\d]", "", text or "")
+    match = PRICE_RE.search(text or "")
+    if not match:
+        return None
+    digits = re.sub(r"[^\d]", "", match.group(1))
     return float(digits) if digits else None
 
 
@@ -29,7 +35,14 @@ def _parse_rooms(text: str) -> Optional[float]:
     return float(match.group(1).replace(",", "."))
 
 
-def _parse_card(card, base_url: str, quelle: str) -> Optional[Listing]:
+def _resolve_url(href: str, base_url: str, allowed_hosts: tuple[str, ...]) -> Optional[str]:
+    absolute = href if href.startswith("http") else f"{base_url}{href}"
+    if urlparse(absolute).hostname not in allowed_hosts:
+        return None
+    return absolute
+
+
+def _parse_card(card, base_url: str, quelle: str, allowed_hosts: tuple[str, ...]) -> Optional[Listing]:
     link = card.query_selector('a[href*="/mieten/"]')
     if link is None:
         return None
@@ -38,17 +51,23 @@ def _parse_card(card, base_url: str, quelle: str) -> Optional[Listing]:
     if id_match is None:
         return None
     listing_id = id_match.group(1)
-    url = href if href.startswith("http") else f"{base_url}{href}"
+    url = _resolve_url(href, base_url, allowed_hosts)
+    if url is None:
+        return None
 
     price_el = card.query_selector('[class*="HgListingCard_mainTitle"], [class*="HgListingCard_price"]')
     address_el = card.query_selector('[class*="HgListingCard_address"]')
     secondary_el = card.query_selector('[class*="HgListingCard_secondaryTitle"]')
     secondary_text = secondary_el.inner_text() if secondary_el else ""
 
+    preis = _parse_price(price_el.inner_text() if price_el else "")
+    if preis is None:
+        return None
+
     return Listing(
         id=f"{quelle}:{listing_id}",
         titel=secondary_text.strip() or "Wohnung",
-        preis=_parse_price(price_el.inner_text() if price_el else "") or 0.0,
+        preis=preis,
         ort=(address_el.inner_text() if address_el else "").strip(),
         zimmer=_parse_rooms(secondary_text),
         url=url,
@@ -56,9 +75,16 @@ def _parse_card(card, base_url: str, quelle: str) -> Optional[Listing]:
     )
 
 
-def scrape_platform(base_url: str, quelle: str, stadt: str, rate_limit_sekunden: float) -> list[Listing]:
+def scrape_platform(
+    base_url: str,
+    quelle: str,
+    stadt: str,
+    rate_limit_sekunden: float,
+    allowed_hosts: tuple[str, ...],
+    path_template: str,
+) -> list[Listing]:
     city_slug = _slugify_city(stadt)
-    url = f"{base_url}/mieten/immobilien/ort-{city_slug}/trefferliste?an=G"
+    url = f"{base_url}{path_template.format(city_slug=city_slug)}"
 
     try:
         with sync_playwright() as playwright:
@@ -70,7 +96,7 @@ def scrape_platform(base_url: str, quelle: str, stadt: str, rate_limit_sekunden:
             page.goto(url, timeout=30000)
             page.wait_for_selector('[data-test="result-list"]', timeout=15000)
             cards = page.query_selector_all('[data-test="result-list-item"]')
-            listings = [_parse_card(card, base_url, quelle) for card in cards]
+            listings = [_parse_card(card, base_url, quelle, allowed_hosts) for card in cards]
             browser.close()
     except PlaywrightError as exc:
         raise ScraperError(f"{quelle}: Ergebnisliste nicht ladbar (Layout geändert oder blockiert?) — {exc}") from exc

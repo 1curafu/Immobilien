@@ -106,3 +106,69 @@ def test_run_skips_email_when_no_hits_and_no_errors(tmp_path, mocker):
     main.run(config_path=config_path, db_path=db_path)
 
     send_mock.assert_not_called()
+
+
+def test_run_prefers_recipient_email_env_var_over_config_file(tmp_path, mocker):
+    near = Listing(id="fake:near", titel="Near", preis=600, ort="Weinfelden", zimmer=None,
+                    url="https://x/1", quelle="fake_near")
+    mocker.patch("src.main.SCRAPERS", {"fake_near": lambda config, conn: [near]})
+    sent_configs = []
+    mocker.patch(
+        "src.main.send_email",
+        side_effect=lambda cfg, subject, html: sent_configs.append(cfg),
+    )
+    mocker.patch.dict("os.environ", {
+        "GMAIL_ADDRESS": "a@gmail.com",
+        "GMAIL_APP_PASSWORD": "secret",
+        "RECIPIENT_EMAIL": "env-recipient@example.com",
+    })
+
+    config = {
+        "suche": {"stadt": "Weinfelden", "radius_km": 15, "preis_max": 650, "zimmer_min": None},
+        "email": {"empfaenger": "config-recipient@example.com", "nur_bei_treffern": True},
+        "scraper": {"aktiviert": ["fake_near"], "rate_limit_sekunden": 0},
+    }
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(yaml.safe_dump(config))
+    db_path = tmp_path / "seen.db"
+    _seed_geocode_cache(db_path, include_zurich=False)
+
+    from src import main
+    main.run(config_path=config_path, db_path=db_path)
+
+    assert len(sent_configs) == 1
+    assert sent_configs[0].recipient == "env-recipient@example.com"
+
+
+def test_run_continues_and_reports_error_when_scraper_raises_plain_exception(tmp_path, mocker):
+    near = Listing(id="fake:near", titel="Near", preis=600, ort="Weinfelden", zimmer=None,
+                    url="https://x/1", quelle="fake_near")
+
+    def broken_scrape(config, conn):
+        raise AttributeError("fake_broken: unexpected AttributeError")
+
+    mocker.patch("src.main.SCRAPERS", {
+        "fake_near": lambda config, conn: [near],
+        "fake_broken": broken_scrape,
+    })
+    sent = {}
+    mocker.patch("src.main.send_email", side_effect=lambda cfg, subject, html: sent.update(html=html))
+    mocker.patch.dict("os.environ", {
+        "GMAIL_ADDRESS": "a@gmail.com", "GMAIL_APP_PASSWORD": "secret", "RECIPIENT_EMAIL": "test@example.com",
+    })
+
+    config = {
+        "suche": {"stadt": "Weinfelden", "radius_km": 15, "preis_max": 650, "zimmer_min": None},
+        "email": {"empfaenger": "test@example.com", "nur_bei_treffern": True},
+        "scraper": {"aktiviert": ["fake_near", "fake_broken"], "rate_limit_sekunden": 0},
+    }
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(yaml.safe_dump(config))
+    db_path = tmp_path / "seen.db"
+    _seed_geocode_cache(db_path, include_zurich=False)
+
+    from src import main
+    main.run(config_path=config_path, db_path=db_path)  # must not raise
+
+    assert "fake_broken" in sent["html"]
+    assert "unexpected AttributeError" in sent["html"]

@@ -52,6 +52,7 @@ def test_parse_link_builds_listing_from_container_text():
 
     assert listing.id == "comparis:37785684"
     assert listing.preis == 2430.0
+    assert listing.ort == "Mezikonerstrasse 7a, 9542 Münchwilen TG"
     assert listing.zimmer == 4.5
     assert listing.url == "https://www.comparis.ch/immobilien/marktplatz/details/show/37785684"
     assert listing.quelle == "comparis"
@@ -67,5 +68,17 @@ def test_parse_link_returns_none_for_non_listing_link():
 def test_parse_link_returns_none_for_untrusted_host_with_matching_path():
     link = MagicMock()
     link.get_attribute.return_value = "https://evil.example/immobilien/marktplatz/details/show/999"
+
+    assert _parse_link(link) is None
+
+
+def test_parse_link_returns_none_when_price_unparseable():
+    link = MagicMock()
+    link.get_attribute.return_value = "/immobilien/marktplatz/details/show/37785684"
+    container = MagicMock()
+    container.inner_text.return_value = "Mezikonerstrasse 7a, 9542 Münchwilen TG\n4.5 Zimmer\nPreis auf Anfrage"
+    handle = MagicMock()
+    handle.as_element.return_value = container
+    link.evaluate_handle.return_value = handle
 
     assert _parse_link(link) is None
