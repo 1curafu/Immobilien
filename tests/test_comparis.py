@@ -39,23 +39,38 @@ def test_parse_rooms_extracts_room_count():
     assert _parse_rooms("4.5 Zimmer, 102 m²") == 4.5
 
 
-def test_parse_link_builds_listing_from_container_text():
+def test_parse_link_builds_listing_from_real_card_text_layout():
+    # Real comparis.ch card layout, captured live 2026-08-17: the <a> itself
+    # wraps the whole card — price, price-label, type, rooms/size, PLZ+Ort,
+    # street, description, CTA — all as its own inner_text().
     link = MagicMock()
-    link.get_attribute.return_value = "/immobilien/marktplatz/details/show/37785684"
-    container = MagicMock()
-    container.inner_text.return_value = "Mezikonerstrasse 7a, 9542 Münchwilen TG\n4.5 Zimmer\nCHF 2’430.–"
-    handle = MagicMock()
-    handle.as_element.return_value = container
-    link.evaluate_handle.return_value = handle
+    link.get_attribute.return_value = "/immobilien/marktplatz/details/show/37839834"
+    link.inner_text.return_value = (
+        "CHF 950\nMietpreis pro Monat\n\nWG-Zimmer\n\n2 Zimmer, 50 m², 1. Etage\n\n"
+        "8570 Weinfelden\n\nOststrasse 32\n\n2 private Zimmer (50 m²) mit eigenem Bad & WC\n\nAnfragen"
+    )
 
     listing = _parse_link(link)
 
-    assert listing.id == "comparis:37785684"
-    assert listing.preis == 2430.0
-    assert listing.ort == "Mezikonerstrasse 7a, 9542 Münchwilen TG"
-    assert listing.zimmer == 4.5
-    assert listing.url == "https://www.comparis.ch/immobilien/marktplatz/details/show/37785684"
+    assert listing.id == "comparis:37839834"
+    assert listing.preis == 950.0
+    assert listing.ort == "8570 Weinfelden"
+    assert listing.zimmer == 2.0
+    assert listing.titel == "WG-Zimmer"
+    assert listing.url == "https://www.comparis.ch/immobilien/marktplatz/details/show/37839834"
     assert listing.quelle == "comparis"
+
+
+def test_parse_link_falls_back_to_first_line_when_no_plz_present():
+    link = MagicMock()
+    link.get_attribute.return_value = "/immobilien/marktplatz/details/show/37785684"
+    link.inner_text.return_value = "Mezikonerstrasse 7a\n4.5 Zimmer\nCHF 2’430.–"
+
+    listing = _parse_link(link)
+
+    assert listing.ort == "Mezikonerstrasse 7a"
+    assert listing.preis == 2430.0
+    assert listing.zimmer == 4.5
 
 
 def test_parse_link_returns_none_for_non_listing_link():
@@ -75,10 +90,6 @@ def test_parse_link_returns_none_for_untrusted_host_with_matching_path():
 def test_parse_link_returns_none_when_price_unparseable():
     link = MagicMock()
     link.get_attribute.return_value = "/immobilien/marktplatz/details/show/37785684"
-    container = MagicMock()
-    container.inner_text.return_value = "Mezikonerstrasse 7a, 9542 Münchwilen TG\n4.5 Zimmer\nPreis auf Anfrage"
-    handle = MagicMock()
-    handle.as_element.return_value = container
-    link.evaluate_handle.return_value = handle
+    link.inner_text.return_value = "Mezikonerstrasse 7a, 9542 Münchwilen TG\n4.5 Zimmer\nPreis auf Anfrage"
 
     assert _parse_link(link) is None

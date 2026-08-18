@@ -19,6 +19,11 @@ BASE_URL = "https://www.comparis.ch"
 PRICE_RE = re.compile(r"CHF\s*([\d'’]+)")
 ROOMS_RE = re.compile(r"(\d+(?:[.,]\d+)?)\s*Zimmer")
 ID_RE = re.compile(r"/immobilien/marktplatz/details/show/(\d+)")
+# Swiss postal code + place name, e.g. "8570 Weinfelden" — anchors ort-extraction
+# to a semantic pattern rather than a fixed line position (verified 2026-08-17
+# against real comparis.ch cards: the card's line order is price, price-label,
+# property type, rooms/size, PLZ+Ort, street, description, CTA).
+PLZ_ORT_RE = re.compile(r"\b\d{4}\s+[A-ZÀ-Ý][\wÀ-ÿ'.\- ]*")
 
 
 def build_request_object(stadt: str, preis_max: float, bbox: dict) -> dict:
@@ -70,6 +75,26 @@ def _resolve_comparis_url(href: str) -> Optional[str]:
     return absolute
 
 
+def _extract_title(text: str) -> str:
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or PRICE_RE.search(line) or "mietpreis" in line.lower() or PLZ_ORT_RE.match(line):
+            continue
+        return line
+    return "Wohnung"
+
+
+def _extract_ort(text: str) -> str:
+    match = PLZ_ORT_RE.search(text)
+    if match:
+        return match.group(0).strip()
+    for line in text.splitlines():
+        line = line.strip()
+        if line:
+            return line
+    return ""
+
+
 def _parse_link(link) -> Optional[Listing]:
     href = link.get_attribute("href") or ""
     id_match = ID_RE.search(href)
@@ -80,10 +105,10 @@ def _parse_link(link) -> Optional[Listing]:
     if url is None:
         return None
 
-    container = link.evaluate_handle(
-        "el => el.closest('article') || el.closest('li') || el.parentElement?.parentElement || el"
-    ).as_element()
-    text = container.inner_text() if container else (link.inner_text() or "")
+    # The result-list anchor wraps the entire card's content (verified against
+    # real comparis.ch HTML on 2026-08-17) — no ancestor walk needed, and
+    # walking up risks concatenating sibling cards' text together.
+    text = link.inner_text() or ""
 
     preis = _parse_price(text)
     if preis is None:
@@ -91,9 +116,9 @@ def _parse_link(link) -> Optional[Listing]:
 
     return Listing(
         id=f"comparis:{id_match.group(1)}",
-        titel=text.splitlines()[0].strip() if text else "Wohnung",
+        titel=_extract_title(text),
         preis=preis,
-        ort=text.splitlines()[0].strip() if text else "",
+        ort=_extract_ort(text),
         zimmer=_parse_rooms(text),
         url=url,
         quelle="comparis",
