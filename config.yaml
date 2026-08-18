@@ -8,6 +8,6 @@ email:
   empfaenger: "icurafu333@gmail.com"   # Fallback, wenn RECIPIENT_EMAIL in .env nicht gesetzt ist
   nur_bei_treffern: true   # false = auch Emails ohne neue Treffer verschicken
 scraper:
-  aktiviert: [flatfox, homegate, immoscout24, comparis]
+  aktiviert: [homegate, immoscout24, comparis]   # flatfox deaktiviert (Code bleibt erhalten, in main.py's SCRAPERS registriert)
   rate_limit_sekunden: 2
   cooldown_stunden: 3   # nach einem Fehler wird dieses Portal für X Stunden übersprungen
