@@ -93,6 +93,30 @@ def test_scrape_raises_scraper_error_on_http_failure(mocker):
         flatfox.scrape(_config(), _conn_with_weinfelden_cached())
 
 
+def test_fetch_listing_details_chunks_requests_past_chunk_size(mocker):
+    pks = list(range(1, 151))  # 150 pks -> 2 chunks of CHUNK_SIZE=100
+
+    first_chunk_response = mocker.Mock()
+    first_chunk_response.json.return_value = {"results": [{"pk": pk} for pk in pks[:100]]}
+    first_chunk_response.raise_for_status.return_value = None
+
+    second_chunk_response = mocker.Mock()
+    second_chunk_response.json.return_value = {"results": [{"pk": pk} for pk in pks[100:]]}
+    second_chunk_response.raise_for_status.return_value = None
+
+    mock_client = mocker.MagicMock()
+    mock_client.get.side_effect = [first_chunk_response, second_chunk_response]
+
+    results = flatfox._fetch_listing_details(mock_client, pks)
+
+    assert mock_client.get.call_count == 2
+    assert len(results) == 150
+    first_call_params = mock_client.get.call_args_list[0].kwargs["params"]
+    assert len([p for p in first_call_params if p[0] == "pk"]) == 100
+    second_call_params = mock_client.get.call_args_list[1].kwargs["params"]
+    assert len([p for p in second_call_params if p[0] == "pk"]) == 50
+
+
 def test_scrape_raises_scraper_error_on_malformed_listing(mocker):
     pins = [{"pk": 1}]
     malformed_response = {

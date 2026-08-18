@@ -9,6 +9,11 @@ USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
 )
+# A single public-listing/ request with ~500 pk= params produces a URL long
+# enough that flatfox.ch's edge returns a 520 (confirmed live 2026-08-18: 450
+# pks/~5.4KB URL succeeds, 500 pks/~6KB fails). 100 per chunk keeps a wide
+# safety margin while still being few enough requests for a daily run.
+CHUNK_SIZE = 100
 
 
 def _fetch_pins(client: httpx.Client, bbox: dict) -> list[dict]:
@@ -19,12 +24,14 @@ def _fetch_pins(client: httpx.Client, bbox: dict) -> list[dict]:
 
 
 def _fetch_listing_details(client: httpx.Client, pks: list[int]) -> list[dict]:
-    if not pks:
-        return []
-    params = [("pk", pk) for pk in pks] + [("limit", len(pks))]
-    response = client.get(f"{BASE_URL}/public-listing/", params=params)
-    response.raise_for_status()
-    return response.json()["results"]
+    results = []
+    for i in range(0, len(pks), CHUNK_SIZE):
+        chunk = pks[i:i + CHUNK_SIZE]
+        params = [("pk", pk) for pk in chunk] + [("limit", len(chunk))]
+        response = client.get(f"{BASE_URL}/public-listing/", params=params)
+        response.raise_for_status()
+        results.extend(response.json()["results"])
+    return results
 
 
 def _to_listing(raw: dict) -> Listing:
