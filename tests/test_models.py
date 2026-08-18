@@ -22,5 +22,10 @@ def test_search_config_defaults_rate_limit():
     assert config.rate_limit_sekunden == 2.0
 
 
+def test_search_config_defaults_preis_min_to_none():
+    config = SearchConfig(stadt="Weinfelden", radius_km=15, preis_max=650, zimmer_min=None)
+    assert config.preis_min is None
+
+
 def test_scraper_error_is_an_exception():
     assert issubclass(ScraperError, Exception)

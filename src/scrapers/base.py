@@ -8,6 +8,7 @@ class SearchConfig:
     radius_km: float
     preis_max: float
     zimmer_min: Optional[float]
+    preis_min: Optional[float] = None
     rate_limit_sekunden: float = 2.0
 
 

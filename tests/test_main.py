@@ -349,3 +349,58 @@ def test_run_clears_cooldown_after_successful_scrape(tmp_path, mocker):
     assert is_in_cooldown(conn2, "fake_near", cooldown_hours=3) is False
     row = conn2.execute("SELECT COUNT(*) FROM scraper_failures WHERE name = 'fake_near'").fetchone()
     assert row[0] == 0
+
+
+def test_run_excludes_listings_below_preis_min(tmp_path, mocker):
+    garage = Listing(id="fake:garage", titel="Garage", preis=120, ort="Weinfelden", zimmer=None,
+                      url="https://x/1", quelle="fake_near")
+    flat = Listing(id="fake:flat", titel="Flat", preis=650, ort="Weinfelden", zimmer=2.5,
+                    url="https://x/2", quelle="fake_near")
+    mocker.patch("src.main.SCRAPERS", {"fake_near": lambda config, conn: [garage, flat]})
+    sent = {}
+    mocker.patch("src.main.send_email", side_effect=lambda cfg, subject, html: sent.update(html=html))
+    mocker.patch.dict("os.environ", {
+        "GMAIL_ADDRESS": "a@gmail.com", "GMAIL_APP_PASSWORD": "secret", "RECIPIENT_EMAIL": "test@example.com",
+    })
+
+    config = {
+        "suche": {"stadt": "Weinfelden", "radius_km": 15, "preis_max": 1000, "preis_min": 200, "zimmer_min": None},
+        "email": {"empfaenger": "test@example.com", "nur_bei_treffern": True},
+        "scraper": {"aktiviert": ["fake_near"], "rate_limit_sekunden": 0},
+    }
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(yaml.safe_dump(config))
+    db_path = tmp_path / "seen.db"
+    _seed_geocode_cache(db_path, include_zurich=False)
+
+    from src import main
+    main.run(config_path=config_path, db_path=db_path)
+
+    assert "CHF 650" in sent["html"]
+    assert "CHF 120" not in sent["html"]
+
+
+def test_run_allows_all_prices_when_preis_min_not_set(tmp_path, mocker):
+    garage = Listing(id="fake:garage", titel="Garage", preis=120, ort="Weinfelden", zimmer=None,
+                      url="https://x/1", quelle="fake_near")
+    mocker.patch("src.main.SCRAPERS", {"fake_near": lambda config, conn: [garage]})
+    sent = {}
+    mocker.patch("src.main.send_email", side_effect=lambda cfg, subject, html: sent.update(html=html))
+    mocker.patch.dict("os.environ", {
+        "GMAIL_ADDRESS": "a@gmail.com", "GMAIL_APP_PASSWORD": "secret", "RECIPIENT_EMAIL": "test@example.com",
+    })
+
+    config = {
+        "suche": {"stadt": "Weinfelden", "radius_km": 15, "preis_max": 1000, "zimmer_min": None},
+        "email": {"empfaenger": "test@example.com", "nur_bei_treffern": True},
+        "scraper": {"aktiviert": ["fake_near"], "rate_limit_sekunden": 0},
+    }
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(yaml.safe_dump(config))
+    db_path = tmp_path / "seen.db"
+    _seed_geocode_cache(db_path, include_zurich=False)
+
+    from src import main
+    main.run(config_path=config_path, db_path=db_path)
+
+    assert "CHF 120" in sent["html"]

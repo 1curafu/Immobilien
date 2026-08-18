@@ -2,6 +2,7 @@ suche:
   stadt: "Weinfelden"
   radius_km: 15
   preis_max: 1000
+  preis_min: 200   # filtert z.B. Garagen/Parkplätze raus; null = keine Mindestgrenze
   zimmer_min: null   # null = keine Mindestanforderung
 email:
   empfaenger: "icurafu333@gmail.com"   # Fallback, wenn RECIPIENT_EMAIL in .env nicht gesetzt ist

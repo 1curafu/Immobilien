@@ -23,11 +23,13 @@ DEFAULT_DB_PATH = ROOT / "seen_listings.db"
 
 def load_config(path: Path) -> tuple[SearchConfig, dict]:
     raw = yaml.safe_load(path.read_text())
+    preis_min = raw["suche"].get("preis_min")
     search_config = SearchConfig(
         stadt=raw["suche"]["stadt"],
         radius_km=float(raw["suche"]["radius_km"]),
         preis_max=float(raw["suche"]["preis_max"]),
         zimmer_min=raw["suche"]["zimmer_min"],
+        preis_min=float(preis_min) if preis_min is not None else None,
         rate_limit_sekunden=float(raw["scraper"]["rate_limit_sekunden"]),
     )
     return search_config, raw
@@ -38,7 +40,7 @@ def run(config_path: Path = DEFAULT_CONFIG_PATH, db_path: Path = DEFAULT_DB_PATH
     search_config, raw_config = load_config(config_path)
     print(
         f"[immo-scraper] Suche: {search_config.stadt} +{search_config.radius_km:.0f}km, "
-        f"preis_max=CHF {search_config.preis_max:.0f}, zimmer_min={search_config.zimmer_min}"
+        f"preis={search_config.preis_min}-{search_config.preis_max:.0f} CHF, zimmer_min={search_config.zimmer_min}"
     )
 
     conn = dedupe.init_db(str(db_path))
@@ -88,6 +90,7 @@ def run(config_path: Path = DEFAULT_CONFIG_PATH, db_path: Path = DEFAULT_DB_PATH
     filtered = [
         listing for listing in nearby
         if listing.preis <= search_config.preis_max
+        and (search_config.preis_min is None or listing.preis >= search_config.preis_min)
         and (
             search_config.zimmer_min is None
             or (listing.zimmer is not None and listing.zimmer >= search_config.zimmer_min)
