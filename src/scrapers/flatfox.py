@@ -1,3 +1,5 @@
+from typing import Optional
+
 import httpx
 
 from src import geocode as geo
@@ -34,15 +36,29 @@ def _fetch_listing_details(client: httpx.Client, pks: list[int]) -> list[dict]:
     return results
 
 
-def _to_listing(raw: dict) -> Listing:
+def _to_listing(raw: dict) -> Optional[Listing]:
+    # price_display is sometimes present but null (e.g. "price on request"
+    # listings) — confirmed live 2026-08-18. Skip that one listing rather
+    # than let it abort the whole batch; same for any other missing/malformed
+    # essential field (pk, url).
+    price = raw.get("price_display")
+    pk = raw.get("pk")
+    url = raw.get("url")
+    if price is None or pk is None or url is None:
+        return None
+    try:
+        preis = float(price)
+    except (TypeError, ValueError):
+        return None
+
     rooms = raw.get("number_of_rooms")
     return Listing(
-        id=f"flatfox:{raw['pk']}",
+        id=f"flatfox:{pk}",
         titel=raw.get("short_title") or raw.get("public_title", ""),
-        preis=float(raw["price_display"]),
+        preis=preis,
         ort=raw.get("city", ""),
         zimmer=float(rooms) if rooms not in (None, "") else None,
-        url=f"https://flatfox.ch{raw['url']}",
+        url=f"https://flatfox.ch{url}",
         quelle="flatfox",
     )
 
@@ -58,6 +74,6 @@ def scrape(config: SearchConfig, geocode_conn) -> list[Listing]:
             pins = _fetch_pins(client, bbox)
             pks = [pin["pk"] for pin in pins]
             raw_listings = _fetch_listing_details(client, pks)
-        return [_to_listing(raw) for raw in raw_listings]
+        return [listing for listing in (_to_listing(raw) for raw in raw_listings) if listing is not None]
     except (httpx.HTTPError, KeyError, ValueError, TypeError) as exc:
         raise ScraperError(f"flatfox: Anfrage oder Verarbeitung fehlgeschlagen — {exc}") from exc

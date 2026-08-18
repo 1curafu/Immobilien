@@ -117,13 +117,30 @@ def test_fetch_listing_details_chunks_requests_past_chunk_size(mocker):
     assert len([p for p in second_call_params if p[0] == "pk"]) == 50
 
 
-def test_scrape_raises_scraper_error_on_malformed_listing(mocker):
-    pins = [{"pk": 1}]
-    malformed_response = {
+def test_to_listing_returns_none_when_price_display_is_null():
+    # Confirmed live 2026-08-18: some real Flatfox listings ("price on
+    # request") have price_display present but null.
+    raw = {"pk": 1, "url": "/x/1/", "price_display": None, "number_of_rooms": "1.0",
+           "city": "Weinfelden", "short_title": "Flat"}
+
+    assert flatfox._to_listing(raw) is None
+
+
+def test_to_listing_returns_none_when_price_display_missing():
+    raw = {"pk": 1, "url": "/x/1/", "number_of_rooms": "1.0",
+           "city": "Weinfelden", "short_title": "Flat"}
+
+    assert flatfox._to_listing(raw) is None
+
+
+def test_scrape_skips_malformed_listing_but_keeps_valid_ones_from_same_batch(mocker):
+    pins = [{"pk": 1}, {"pk": 2}]
+    mixed_response = {
         "results": [
-            {"pk": 1, "url": "/x/1/", "number_of_rooms": "1.0",
-             "city": "Weinfelden", "short_title": "Flat"}
-            # Missing price_display — will cause KeyError in _to_listing
+            {"pk": 1, "url": "/x/1/", "price_display": None, "number_of_rooms": "1.0",
+             "city": "Weinfelden", "short_title": "Price on request"},
+            {"pk": 2, "url": "/x/2/", "price_display": 650, "number_of_rooms": "2.0",
+             "city": "Weinfelden", "short_title": "Real listing"},
         ]
     }
 
@@ -132,7 +149,7 @@ def test_scrape_raises_scraper_error_on_malformed_listing(mocker):
     mock_pins_response.raise_for_status.return_value = None
 
     mock_listings_response = mocker.Mock()
-    mock_listings_response.json.return_value = malformed_response
+    mock_listings_response.json.return_value = mixed_response
     mock_listings_response.raise_for_status.return_value = None
 
     mock_client = mocker.MagicMock()
@@ -140,5 +157,7 @@ def test_scrape_raises_scraper_error_on_malformed_listing(mocker):
     mock_client.get.side_effect = [mock_pins_response, mock_listings_response]
     mocker.patch("src.scrapers.flatfox.httpx.Client", return_value=mock_client)
 
-    with pytest.raises(ScraperError):
-        flatfox.scrape(_config(), _conn_with_weinfelden_cached())
+    result = flatfox.scrape(_config(), _conn_with_weinfelden_cached())
+
+    assert len(result) == 1
+    assert result[0].id == "flatfox:2"

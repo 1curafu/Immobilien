@@ -34,3 +34,16 @@ def test_workflow_declares_all_three_secrets():
     text = WORKFLOW_PATH.read_text()
     for secret in ("GMAIL_ADDRESS", "GMAIL_APP_PASSWORD", "RECIPIENT_EMAIL"):
         assert f"secrets.{secret}" in text
+
+
+def test_workflow_push_is_gated_by_a_single_diff_check_not_two():
+    # Regression test: `git diff --staged --quiet || git commit ...` followed
+    # by a SECOND `git diff --staged --quiet || git push` never pushes — the
+    # commit consumes the staged diff, so the second check always sees "no
+    # changes" and skips the push. Confirmed live 2026-08-18: seen_listings.db
+    # was committed on the runner every time but never reached origin. The
+    # push must be gated by the same diff check that gates the commit, not a
+    # second independent one.
+    text = WORKFLOW_PATH.read_text()
+    assert text.count("git diff --staged --quiet") == 1
+    assert "git push" in text
