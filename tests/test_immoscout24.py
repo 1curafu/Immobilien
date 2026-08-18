@@ -15,4 +15,8 @@ def test_scrape_calls_shared_platform_with_immoscout24_domain(mocker):
         2,
         allowed_hosts=("www.immoscout24.ch", "immoscout24.ch"),
         path_template="/de/immobilien/mieten/ort-{city_slug}?an=G",
+        radius_km=15,
+        preis_max=650,
+        radius_param="r",
+        price_param="pt",
     )

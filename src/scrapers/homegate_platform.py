@@ -35,6 +35,26 @@ def _parse_rooms(text: str) -> Optional[float]:
     return float(match.group(1).replace(",", "."))
 
 
+def _build_search_url(
+    base_url: str,
+    path_template: str,
+    city_slug: str,
+    radius_km: float,
+    preis_max: float,
+    radius_param: str,
+    price_param: str,
+) -> str:
+    # Native radius/price params found via search-engine-indexed real URLs
+    # 2026-08-18 (homegate: be=<radius_m>&ah=<preis_max>, immoscout24:
+    # r=<radius_m>&pt=<preis_max>) — appended after the robots.txt-required
+    # an=G, still on the robots.txt-allowed "immobilien" path. Without these,
+    # the scraper only ever searched the exact target city with no radius
+    # expansion at all.
+    path = path_template.format(city_slug=city_slug)
+    radius_m = int(round(radius_km * 1000))
+    return f"{base_url}{path}&{radius_param}={radius_m}&{price_param}={int(preis_max)}"
+
+
 def _resolve_url(href: str, base_url: str, allowed_hosts: tuple[str, ...]) -> Optional[str]:
     absolute = href if href.startswith("http") else f"{base_url}{href}"
     if urlparse(absolute).hostname not in allowed_hosts:
@@ -82,9 +102,15 @@ def scrape_platform(
     rate_limit_sekunden: float,
     allowed_hosts: tuple[str, ...],
     path_template: str,
+    radius_km: float,
+    preis_max: float,
+    radius_param: str,
+    price_param: str,
 ) -> list[Listing]:
     city_slug = _slugify_city(stadt)
-    url = f"{base_url}{path_template.format(city_slug=city_slug)}"
+    url = _build_search_url(
+        base_url, path_template, city_slug, radius_km, preis_max, radius_param, price_param
+    )
 
     try:
         with sync_playwright() as playwright:

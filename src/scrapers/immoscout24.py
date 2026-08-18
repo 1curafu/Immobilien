@@ -23,4 +23,8 @@ def scrape(config: SearchConfig, geocode_conn) -> list[Listing]:
         config.rate_limit_sekunden,
         allowed_hosts=("www.immoscout24.ch", "immoscout24.ch"),
         path_template=PATH_TEMPLATE,
+        radius_km=config.radius_km,
+        preis_max=config.preis_max,
+        radius_param="r",
+        price_param="pt",
     )

@@ -15,4 +15,8 @@ def test_scrape_calls_shared_platform_with_homegate_domain(mocker):
         2,
         allowed_hosts=("www.homegate.ch", "homegate.ch"),
         path_template="/mieten/immobilien/ort-{city_slug}/trefferliste?an=G",
+        radius_km=15,
+        preis_max=650,
+        radius_param="be",
+        price_param="ah",
     )

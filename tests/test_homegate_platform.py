@@ -1,9 +1,46 @@
 from unittest.mock import MagicMock
 
-from src.scrapers.homegate_platform import _parse_card, _parse_price, _parse_rooms, _slugify_city
+from src.scrapers.homegate_platform import (
+    _build_search_url,
+    _parse_card,
+    _parse_price,
+    _parse_rooms,
+    _slugify_city,
+)
 
 HOMEGATE_HOSTS = ("www.homegate.ch", "homegate.ch")
 IMMOSCOUT24_HOSTS = ("www.immoscout24.ch", "immoscout24.ch")
+
+
+def test_build_search_url_appends_radius_in_meters_and_price():
+    url = _build_search_url(
+        "https://www.homegate.ch",
+        "/mieten/immobilien/ort-{city_slug}/trefferliste?an=G",
+        "weinfelden",
+        radius_km=15,
+        preis_max=1000,
+        radius_param="be",
+        price_param="ah",
+    )
+
+    assert url == (
+        "https://www.homegate.ch/mieten/immobilien/ort-weinfelden/trefferliste"
+        "?an=G&be=15000&ah=1000"
+    )
+
+
+def test_build_search_url_uses_immoscout24_param_names():
+    url = _build_search_url(
+        "https://www.immoscout24.ch",
+        "/de/immobilien/mieten/ort-{city_slug}?an=G",
+        "weinfelden",
+        radius_km=20,
+        preis_max=650,
+        radius_param="r",
+        price_param="pt",
+    )
+
+    assert url == "https://www.immoscout24.ch/de/immobilien/mieten/ort-weinfelden?an=G&r=20000&pt=650"
 
 
 def test_slugify_city_lowercases_and_hyphenates():
