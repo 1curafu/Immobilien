@@ -4,7 +4,7 @@ from pathlib import Path
 import yaml
 from dotenv import load_dotenv
 
-from src import dedupe, geocode as geo
+from src import cooldown, dedupe, geocode as geo
 from src.notifier import EmailConfig, build_html, build_subject, send_email
 from src.scrapers import comparis, flatfox, homegate, immoscout24
 from src.scrapers.base import ScraperError, SearchConfig
@@ -39,21 +39,35 @@ def run(config_path: Path = DEFAULT_CONFIG_PATH, db_path: Path = DEFAULT_DB_PATH
 
     conn = dedupe.init_db(str(db_path))
     geo.init_geocode_cache(conn)
+    cooldown.init_cooldown(conn)
 
     center = geo.geocode(conn, search_config.stadt)
     if center is None:
         raise SystemExit(f"Zielstadt '{search_config.stadt}' konnte nicht geokodiert werden.")
 
+    cooldown_hours = float(raw_config["scraper"].get("cooldown_stunden", 3))
+
     all_listings = []
     errors = []
     for name in raw_config["scraper"]["aktiviert"]:
+        if cooldown.is_in_cooldown(conn, name, cooldown_hours):
+            hours_ago = cooldown.hours_since_failure(conn, name)
+            errors.append(
+                f"{name}: übersprungen (letzter Fehler vor {hours_ago:.1f}h, "
+                f"Cooldown {cooldown_hours:.0f}h aktiv)"
+            )
+            continue
+
         scrape_fn = SCRAPERS[name]
         try:
             all_listings.extend(scrape_fn(search_config, conn))
+            cooldown.clear_failure(conn, name)
         except ScraperError as exc:
             errors.append(str(exc))
+            cooldown.record_failure(conn, name)
         except Exception as exc:  # noqa: BLE001 - a single scraper failing must never stop the run
             errors.append(f"{name}: unerwarteter Fehler — {exc}")
+            cooldown.record_failure(conn, name)
 
     nearby = geo.filter_by_radius(conn, all_listings, center, search_config.radius_km)
     filtered = [

@@ -236,3 +236,116 @@ def test_run_continues_and_reports_error_when_scraper_raises_plain_exception(tmp
 
     assert "fake_broken" in sent["html"]
     assert "unexpected AttributeError" in sent["html"]
+
+
+def test_run_skips_scraper_still_in_cooldown_after_recent_failure(tmp_path, mocker):
+    call_count = {"n": 0}
+
+    def fake_near_scrape(config, conn):
+        call_count["n"] += 1
+        return []
+
+    mocker.patch("src.main.SCRAPERS", {"fake_near": fake_near_scrape})
+    sent = {}
+    mocker.patch("src.main.send_email", side_effect=lambda cfg, subject, html: sent.update(html=html))
+    mocker.patch.dict("os.environ", {
+        "GMAIL_ADDRESS": "a@gmail.com", "GMAIL_APP_PASSWORD": "secret", "RECIPIENT_EMAIL": "test@example.com",
+    })
+
+    config = {
+        "suche": {"stadt": "Weinfelden", "radius_km": 15, "preis_max": 650, "zimmer_min": None},
+        "email": {"empfaenger": "test@example.com", "nur_bei_treffern": True},
+        "scraper": {"aktiviert": ["fake_near"], "rate_limit_sekunden": 0, "cooldown_stunden": 3},
+    }
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(yaml.safe_dump(config))
+    db_path = tmp_path / "seen.db"
+    _seed_geocode_cache(db_path, include_zurich=False)
+
+    conn = sqlite3.connect(str(db_path))
+    from src.cooldown import init_cooldown, record_failure
+    init_cooldown(conn)
+    record_failure(conn, "fake_near")
+    conn.close()
+
+    from src import main
+    main.run(config_path=config_path, db_path=db_path)
+
+    assert call_count["n"] == 0
+    assert "übersprungen" in sent["html"]
+
+
+def test_run_calls_scraper_again_after_cooldown_expires(tmp_path, mocker):
+    call_count = {"n": 0}
+
+    def fake_near_scrape(config, conn):
+        call_count["n"] += 1
+        return []
+
+    mocker.patch("src.main.SCRAPERS", {"fake_near": fake_near_scrape})
+    mocker.patch("src.main.send_email")
+    mocker.patch.dict("os.environ", {
+        "GMAIL_ADDRESS": "a@gmail.com", "GMAIL_APP_PASSWORD": "secret", "RECIPIENT_EMAIL": "test@example.com",
+    })
+
+    config = {
+        "suche": {"stadt": "Weinfelden", "radius_km": 15, "preis_max": 650, "zimmer_min": None},
+        "email": {"empfaenger": "test@example.com", "nur_bei_treffern": True},
+        "scraper": {"aktiviert": ["fake_near"], "rate_limit_sekunden": 0, "cooldown_stunden": 3},
+    }
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(yaml.safe_dump(config))
+    db_path = tmp_path / "seen.db"
+    _seed_geocode_cache(db_path, include_zurich=False)
+
+    conn = sqlite3.connect(str(db_path))
+    from src.cooldown import init_cooldown
+    init_cooldown(conn)
+    conn.execute(
+        "INSERT INTO scraper_failures (name, failed_at) VALUES ('fake_near', datetime('now', '-5 hours'))"
+    )
+    conn.commit()
+    conn.close()
+
+    from src import main
+    main.run(config_path=config_path, db_path=db_path)
+
+    assert call_count["n"] == 1
+
+
+def test_run_clears_cooldown_after_successful_scrape(tmp_path, mocker):
+    mocker.patch("src.main.SCRAPERS", {"fake_near": lambda config, conn: []})
+    mocker.patch("src.main.send_email")
+    mocker.patch.dict("os.environ", {
+        "GMAIL_ADDRESS": "a@gmail.com", "GMAIL_APP_PASSWORD": "secret", "RECIPIENT_EMAIL": "test@example.com",
+    })
+
+    config = {
+        "suche": {"stadt": "Weinfelden", "radius_km": 15, "preis_max": 650, "zimmer_min": None},
+        "email": {"empfaenger": "test@example.com", "nur_bei_treffern": True},
+        "scraper": {"aktiviert": ["fake_near"], "rate_limit_sekunden": 0, "cooldown_stunden": 3},
+    }
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(yaml.safe_dump(config))
+    db_path = tmp_path / "seen.db"
+    _seed_geocode_cache(db_path, include_zurich=False)
+
+    # A failure old enough to be past cooldown: the scraper still runs (and
+    # succeeds), and the stale failure row should be cleared afterward.
+    conn = sqlite3.connect(str(db_path))
+    from src.cooldown import init_cooldown
+    init_cooldown(conn)
+    conn.execute(
+        "INSERT INTO scraper_failures (name, failed_at) VALUES ('fake_near', datetime('now', '-5 hours'))"
+    )
+    conn.commit()
+    conn.close()
+
+    from src import main
+    main.run(config_path=config_path, db_path=db_path)
+
+    from src.cooldown import is_in_cooldown
+    conn2 = sqlite3.connect(str(db_path))
+    assert is_in_cooldown(conn2, "fake_near", cooldown_hours=3) is False
+    row = conn2.execute("SELECT COUNT(*) FROM scraper_failures WHERE name = 'fake_near'").fetchone()
+    assert row[0] == 0

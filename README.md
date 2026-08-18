@@ -8,6 +8,15 @@ Email, sortiert nach Preis (aufsteigend).
 > **wgzimmer.ch wird nicht automatisiert:** jede Suche dort ist per
 > reCAPTCHA geschützt. Prüfe WG-Zimmer manuell unter
 > [wgzimmer.ch](https://www.wgzimmer.ch/wgzimmer/search/mate.html).
+>
+> **Kein Captcha-Bypass:** Homegate, ImmoScout24 und Comparis sind hinter
+> DataDome. Der Scraper verhält sich wie ein normaler Browser (echtes
+> Chromium, keine Automatisierungs-Flags), löst aber keine aktiven
+> Challenges — wenn ein Portal an einem Tag blockiert wird, wird dieses eine
+> Portal für `scraper.cooldown_stunden` (Default 3h, in `config.yaml`)
+> übersprungen, damit kein wiederholter Traffic gegen ein gerade
+> blockiertes Portal läuft. Die anderen Portale und der Email-Versand laufen
+> davon unberührt weiter.
 
 ## Setup (lokal)
 

@@ -9,3 +9,4 @@ email:
 scraper:
   aktiviert: [flatfox, homegate, immoscout24, comparis]
   rate_limit_sekunden: 2
+  cooldown_stunden: 3   # nach einem Fehler wird dieses Portal für X Stunden übersprungen
