@@ -1,46 +1,46 @@
 # .github/workflows/search.yml
-name: Immo Search
+#name: Immo Search
 
-on:
-  schedule:
+#on:
+#  schedule:
     # 05:00 UTC = 07:00 Europe/Zurich during CEST (summer). During CET (winter)
     # this lands at 06:00 local time — cron has no timezone support, so a ~1h
     # seasonal drift is accepted for a daily digest rather than adding
     # complexity to work around it.
-    - cron: "0 5 * * *"
-  workflow_dispatch: {}
+#    - cron: "0 5 * * *"
+#  workflow_dispatch: {}
 
-permissions:
-  contents: write
+#permissions:
+#  contents: write
 
-jobs:
-  search:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+#jobs:
+#  search:
+#    runs-on: ubuntu-latest
+#    steps:
+#      - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
+#      - uses: actions/setup-python@v5
+#        with:
+#          python-version: "3.11"
 
-      - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
-          playwright install --with-deps chromium
+#      - name: Install dependencies
+#        run: |
+#          pip install -r requirements.txt
+#          playwright install --with-deps chromium
 
-      - name: Run scraper
-        env:
-          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
-          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
-          RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
-        run: xvfb-run --auto-servernum python -m src.main
+#      - name: Run scraper
+#        env:
+#          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+#          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+#          RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
+#        run: xvfb-run --auto-servernum python -m src.main
 
-      - name: Persist seen-listings database
-        run: |
-          git config user.name "immo-scraper-bot"
-          git config user.email "actions@users.noreply.github.com"
-          git add seen_listings.db
-          if ! git diff --staged --quiet; then
-            git commit -m "Update seen listings [skip ci]"
-            git push
-          fi
+#      - name: Persist seen-listings database
+#        run: |
+#          git config user.name "immo-scraper-bot"
+#          git config user.email "actions@users.noreply.github.com"
+#          git add seen_listings.db
+#          if ! git diff --staged --quiet; then
+#            git commit -m "Update seen listings [skip ci]"
+#            git push
+#          fi
